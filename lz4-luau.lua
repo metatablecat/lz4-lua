@@ -4,6 +4,19 @@ local function plainFind(str, pat)
 	return string.find(str, pat, 0, true)
 end
 
+local function hex(str)
+	local out = ""
+	for i = 1, string.len(str) do
+		local c = string.sub(str, i, i)
+		local b = string.byte(c)
+		local padding = "" if b < 0x10 then padding = "0" end
+
+		out = out .. padding .. string.format("%x ", b)
+	end
+
+	return out
+end
+
 local function streamer(str)
 	local Stream = {}
 	Stream.Offset = 0
@@ -17,7 +30,10 @@ local function streamer(str)
 		local dat = string.sub(self.Source, self.Offset + 1, self.Offset + len)
 		
 		if shift then
-			self:seek(len)
+			self.Offset += len
+			if self.Offset >= self.Length then
+				self.IsFinished = true
+			end
 		end
 		
 		return dat
@@ -185,6 +201,50 @@ function lz4.compress(str)
 	local decompLen = iostream.Length
 
 	return string.pack("<I4", compLen) .. string.pack("<I4", decompLen) .. output, blocks
+end
+
+function lz4.decompress(lz4data)
+	local iostream = streamer(lz4data)
+	local compressedLen = string.unpack("<I4", iostream:read(4))
+	local decompressedLen = string.unpack("<I4", iostream:read(4))
+	local reserved = string.unpack("<I4", iostream:read(4))
+	
+	if compressedLen == 0 then
+		return iostream:read(iostream.Length)
+	end
+	
+	local outBuffer = ""
+	repeat
+		local token = string.byte(iostream:read())
+		local litLen = bit32.rshift(token, 4)
+		local matLen = bit32.band(token, 0xF)
+		
+		if litLen == 15 then
+			repeat
+				local nextByte = string.byte(iostream:read())
+				litLen = litLen + nextByte
+			until nextByte ~= 0xFF
+		end
+		
+		print(litLen)
+		outBuffer = outBuffer .. iostream:read(litLen)
+		
+		if not iostream.IsFinished then
+			local offset = string.unpack("<I2", iostream:read(2))
+			if matLen == 15 then
+				repeat
+					local nextByte = string.byte(iostream:read())
+					matLen = matLen + nextByte
+				until nextByte ~= 0xFF
+			end
+			matLen = matLen + 3
+			local off = (string.len(outBuffer) - offset) + 1
+			local offsetData = string.sub(outBuffer, off, off + matLen)
+			outBuffer = outBuffer .. offsetData
+		end
+	until iostream.IsFinished
+	
+	return outBuffer
 end
 
 return lz4

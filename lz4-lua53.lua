@@ -1,13 +1,26 @@
 local lz4 = {}
 
-local function plainFind(str, pat)
-	return string.find(str, pat, 0, true)
-end
-
 local function clamp(n, n1, n2)
 	if n < n1 then return n1 end
 	if n > n2 then return n2 end
 	return n
+end
+
+local function plainFind(str, pat)
+	return string.find(str, pat, 0, true)
+end
+
+local function hex(str)
+	local out = ""
+	for i = 1, string.len(str) do
+		local c = string.sub(str, i, i)
+		local b = string.byte(c)
+		local padding = "" if b < 0x10 then padding = "0" end
+
+		out = out .. padding .. string.format("%x ", b)
+	end
+
+	return out
 end
 
 local function streamer(str)
@@ -20,12 +33,17 @@ local function streamer(str)
 	function Stream:read(len, shift)
 		local len = len or 1
 		local shift = shift
-		if shift == nil then shift = true end
+		if shift == nil then
+			shift = true
+		end
 
 		local dat = string.sub(self.Source, self.Offset + 1, self.Offset + len)
 		
 		if shift then
-			self:seek(len)
+			self.Offset = len + len
+			if self.Offset >= self.Length then
+				self.IsFinished = true
+			end
 		end
 		
 		return dat
@@ -34,7 +52,7 @@ local function streamer(str)
 	function Stream:seek(len)
 		local len = len or 1
 		
-		self.Offset = self.Offset + clamp(len, 0, self.Length)		
+		self.Offset = self.Offset + clamp(len, 0, self.Length)
 		self.IsFinished = self.Offset >= self.Length
 	end
 	
@@ -193,6 +211,50 @@ function lz4.compress(str)
 	local decompLen = iostream.Length
 
 	return string.pack("<I4", compLen) .. string.pack("<I4", decompLen) .. output, blocks
+end
+
+function lz4.decompress(lz4data)
+	local iostream = streamer(lz4data)
+	local compressedLen = string.unpack("<I4", iostream:read(4))
+	local decompressedLen = string.unpack("<I4", iostream:read(4))
+	local reserved = string.unpack("<I4", iostream:read(4))
+	
+	if compressedLen == 0 then
+		return iostream:read(iostream.Length)
+	end
+	
+	local outBuffer = ""
+	repeat
+		local token = string.byte(iostream:read())
+		local litLen = token >> 4
+		local matLen = token & 0xF
+		
+		if litLen == 15 then
+			repeat
+				local nextByte = string.byte(iostream:read())
+				litLen = litLen + nextByte
+			until nextByte ~= 0xFF
+		end
+		
+		print(litLen)
+		outBuffer = outBuffer .. iostream:read(litLen)
+		
+		if not iostream.IsFinished then
+			local offset = string.unpack("<I2", iostream:read(2))
+			if matLen == 15 then
+				repeat
+					local nextByte = string.byte(iostream:read())
+					matLen = matLen + nextByte
+				until nextByte ~= 0xFF
+			end
+			matLen = matLen + 3
+			local off = (string.len(outBuffer) - offset) + 1
+			local offsetData = string.sub(outBuffer, off, off + matLen)
+			outBuffer = outBuffer .. offsetData
+		end
+	until iostream.IsFinished
+	
+	return outBuffer
 end
 
 return lz4
