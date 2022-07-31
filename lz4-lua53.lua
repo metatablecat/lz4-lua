@@ -1,3 +1,5 @@
+-- metatablecat 2022
+
 local lz4 = {}
 
 local function plainFind(str, pat)
@@ -8,19 +10,6 @@ local function clamp(n, n1, n2)
 	if n < n1 then return n1 end
 	if n > n2 then return n2 end
 	return n
-end
-
-local function hex(str)
-	local out = ""
-	for i = 1, string.len(str) do
-		local c = string.sub(str, i, i)
-		local b = string.byte(c)
-		local padding = "" if b < 0x10 then padding = "0" end
-
-		out = out .. padding .. string.format("%x ", b)
-	end
-
-	return out
 end
 
 local function streamer(str)
@@ -229,8 +218,7 @@ function lz4.decompress(lz4data)
 				litLen = litLen + nextByte
 			until nextByte ~= 0xFF
 		end
-		
-		print(litLen)
+
 		outBuffer = outBuffer .. iostream:read(litLen)
 		
 		if not iostream.IsFinished then

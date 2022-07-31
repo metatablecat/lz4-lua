@@ -1,4 +1,6 @@
 --!strict
+-- metatablecat 2022
+
 local lz4 = {}
 
 type Streamer = {
@@ -22,19 +24,6 @@ type BlockData = {
 
 local function plainFind(str, pat)
 	return string.find(str, pat, 0, true)
-end
-
-local function hex(str)
-	local out = ""
-	for i = 1, string.len(str) do
-		local c = string.sub(str, i, i)
-		local b = string.byte(c)
-		local padding = "" if b < 0x10 then padding = "0" end
-
-		out = out .. padding .. string.format("%x ", b)
-	end
-
-	return out
 end
 
 local function streamer(str): Streamer
@@ -243,7 +232,6 @@ function lz4.decompress(lz4data: string): string
 			until nextByte ~= 0xFF
 		end
 
-		print(litLen)
 		outBuffer = outBuffer .. iostream:read(litLen)
 
 		if not iostream.IsFinished then
