@@ -1,0 +1,16 @@
+{
+	"name": "LZ4 Luau Tests",
+	"tree": {
+		"$className": "DataModel",
+		"ServerScriptService": {
+			"$className": "ServerScriptService",
+			"tests": {
+				"$path": "src"
+			},
+
+			"lz4": {
+				"$path": "../../lz4-luau.lua"
+			}
+		}
+	}
+}
