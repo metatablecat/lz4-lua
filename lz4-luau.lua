@@ -48,7 +48,7 @@ local function streamer(str): Streamer
 	function Stream.seek(self: Streamer, len: number)
 		local len = len or 1
 
-		self.Offset += math.clamp(len, 0, self.Length)		
+		self.Offset = math.clamp(self.Offset + len, 0, self.Length)
 		self.IsFinished = self.Offset >= self.Length
 	end
 
@@ -242,7 +242,9 @@ function lz4.decompress(lz4data: string): string
 					matLen = matLen + nextByte
 				until nextByte ~= 0xFF
 			end
+
 			matLen = matLen + 3
+
 			local off = (string.len(outBuffer) - offset) + 1
 			local offsetData = string.sub(outBuffer, off, off + matLen)
 			outBuffer = outBuffer .. offsetData

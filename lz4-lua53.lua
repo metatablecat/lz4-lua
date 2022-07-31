@@ -35,7 +35,7 @@ local function streamer(str)
 	function Stream:seek(len)
 		local len = len or 1
 		
-		self.Offset = self.Offset + clamp(len, 0, self.Length)
+		self.Offset = clamp(self.Offset + len, 0, self.Length)
 		self.IsFinished = self.Offset >= self.Length
 	end
 	

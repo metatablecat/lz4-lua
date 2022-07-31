@@ -25,7 +25,6 @@ local Tests = {
 	["compressed data can be decompressed"] = function()
 		local data_chunk = "The LZ4 algorithms aims to provide a good trade-off between speed and compression ratio. Typically, it has a smaller (i.e., worse) compression ratio than the similar LZO algorithm, which in turn is worse than algorithms like DEFLATE. However, LZ4 compression speed is similar to LZO and several times faster than DEFLATE, while decompression speed is significantly faster than LZO"
 		local c = lz4.compress(data_chunk)
-
 		return lz4.decompress(c) == data_chunk
 	end,
 
@@ -33,11 +32,16 @@ local Tests = {
 		-- this test fails, please help fix this
 
 		local data = ""
-		for i = 1, 2048 do
-			data ..= string.char(math.random(0,255))
+		for i = 1, 512 do
+			local char = string.char(math.random(65,90))
+			data ..= string.rep(char, 8)
 		end
 
 		local c = lz4.compress(data)
+		local d = lz4.decompress(c)
+
+		print(hex(c))
+		print(hex(d))
 		return lz4.decompress(c) == data
 	end
 }
