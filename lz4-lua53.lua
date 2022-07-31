@@ -160,7 +160,7 @@ function lz4.compress(str)
 			litLen = litLen - 15
 			--begin packing extra bytes
 			repeat
-				local nextToken = litLen % 256
+				local nextToken = clamp(litLen, 0, 0xFF)
 				write(string.pack("<I1", nextToken))
 				if nextToken == 0xFF then
 					litLen = litLen - 255
@@ -180,7 +180,7 @@ function lz4.compress(str)
 				matLen = matLen - 15
 
 				repeat
-					local nextToken = matLen % 256
+					local nextToken = clamp(matLen, 0, 0xFF)
 					write(string.pack("<I1", nextToken))
 					if nextToken == 0xFF then
 						matLen = matLen - 255

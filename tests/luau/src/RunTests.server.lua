@@ -40,7 +40,7 @@ local Tests = {
 		local c = lz4.compress(data)
 		local d = lz4.decompress(c)
 
-		return lz4.decompress(c) == data
+		return d == data
 	end
 }
 
