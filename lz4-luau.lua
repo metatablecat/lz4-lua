@@ -30,10 +30,7 @@ local function streamer(str)
 		local dat = string.sub(self.Source, self.Offset + 1, self.Offset + len)
 		
 		if shift then
-			self.Offset += len
-			if self.Offset >= self.Length then
-				self.IsFinished = true
-			end
+			self:seek(len)
 		end
 		
 		return dat
