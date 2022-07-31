@@ -1,4 +1,24 @@
+--!strict
 local lz4 = {}
+
+type Streamer = {
+	Offset: number,
+	Source: string,
+	Length: number,
+	IsFinished: boolean,
+	
+	read: (Streamer, len: number?, shiftOffset: boolean?) -> string,
+	seek: (Streamer, len: number) -> ()
+}
+
+type BlockData = {
+	[number]: {
+		Literal: string,
+		LiteralLength: number,
+		MatchOffset: number?,
+		MatchLength: number?
+	}
+}
 
 local function plainFind(str, pat)
 	return string.find(str, pat, 0, true)
@@ -17,39 +37,39 @@ local function hex(str)
 	return out
 end
 
-local function streamer(str)
+local function streamer(str): Streamer
 	local Stream = {}
 	Stream.Offset = 0
 	Stream.Source = str
 	Stream.Length = string.len(str)
 	Stream.IsFinished = false	
-	
-	function Stream:read(len, shift)
+
+	function Stream.read(self: Streamer, len: number?, shift: boolean?): string
 		local len = len or 1
 		local shift = if shift ~= nil then shift else true
 		local dat = string.sub(self.Source, self.Offset + 1, self.Offset + len)
-		
+
 		if shift then
 			self:seek(len)
 		end
-		
+
 		return dat
 	end
-	
-	function Stream:seek(len)
+
+	function Stream.seek(self: Streamer, len: number)
 		local len = len or 1
-		
+
 		self.Offset += math.clamp(len, 0, self.Length)		
 		self.IsFinished = self.Offset >= self.Length
 	end
-	
+
 	return Stream
 end
 
-function lz4.compress(str)
-	local blocks = {}
+function lz4.compress(str: string): string
+	local blocks: BlockData = {}
 	local iostream = streamer(str)
-	
+
 	if iostream.Length > 8 then
 		local firstFour = iostream:read(4)
 
@@ -58,14 +78,14 @@ function lz4.compress(str)
 		local match = ""
 		local LiteralPushValue = ""
 		local pushToLiteral = true
-		
+
 		repeat
 			pushToLiteral = true
 			local nextByte = iostream:read()
 
 			if plainFind(processed, nextByte) then
 				local next3 = iostream:read(3, false)
-				
+
 				if string.len(next3) < 3 then
 					--push bytes to literal block then break
 					LiteralPushValue = nextByte .. next3
@@ -90,7 +110,7 @@ function lz4.compress(str)
 
 						local matchLen = string.len(match)
 						local pushMatch = true
-						
+
 						if iostream.IsFinished then
 							if matchLen <= 4 then
 								LiteralPushValue = match
@@ -200,32 +220,32 @@ function lz4.compress(str)
 	return string.pack("<I4", compLen) .. string.pack("<I4", decompLen) .. output, blocks
 end
 
-function lz4.decompress(lz4data)
+function lz4.decompress(lz4data: string): string
 	local iostream = streamer(lz4data)
 	local compressedLen = string.unpack("<I4", iostream:read(4))
 	local decompressedLen = string.unpack("<I4", iostream:read(4))
 	local reserved = string.unpack("<I4", iostream:read(4))
-	
+
 	if compressedLen == 0 then
 		return iostream:read(iostream.Length)
 	end
-	
+
 	local outBuffer = ""
 	repeat
 		local token = string.byte(iostream:read())
 		local litLen = bit32.rshift(token, 4)
 		local matLen = bit32.band(token, 0xF)
-		
+
 		if litLen == 15 then
 			repeat
 				local nextByte = string.byte(iostream:read())
 				litLen = litLen + nextByte
 			until nextByte ~= 0xFF
 		end
-		
+
 		print(litLen)
 		outBuffer = outBuffer .. iostream:read(litLen)
-		
+
 		if not iostream.IsFinished then
 			local offset = string.unpack("<I2", iostream:read(2))
 			if matLen == 15 then
@@ -240,7 +260,7 @@ function lz4.decompress(lz4data)
 			outBuffer = outBuffer .. offsetData
 		end
 	until iostream.IsFinished
-	
+
 	return outBuffer
 end
 
