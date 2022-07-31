@@ -8,9 +8,12 @@ type Streamer = {
 	Source: string,
 	Length: number,
 	IsFinished: boolean,
-	
+	LastUnreadBytes: number,
+
 	read: (Streamer, len: number?, shiftOffset: boolean?) -> string,
-	seek: (Streamer, len: number) -> ()
+	seek: (Streamer, len: number) -> (),
+	append: (Streamer, newData: string) -> (),
+	toEnd: (Streamer) -> ()
 }
 
 type BlockData = {
@@ -32,16 +35,21 @@ local function streamer(str): Streamer
 	Stream.Source = str
 	Stream.Length = string.len(str)
 	Stream.IsFinished = false	
+	Stream.LastUnreadBytes = 0
 
 	function Stream.read(self: Streamer, len: number?, shift: boolean?): string
 		local len = len or 1
 		local shift = if shift ~= nil then shift else true
 		local dat = string.sub(self.Source, self.Offset + 1, self.Offset + len)
 
+		local dataLength = string.len(dat)
+		local unreadBytes = len - dataLength
+
 		if shift then
 			self:seek(len)
 		end
 
+		self.LastUnreadBytes = unreadBytes
 		return dat
 	end
 
@@ -52,6 +60,17 @@ local function streamer(str): Streamer
 		self.IsFinished = self.Offset >= self.Length
 	end
 
+	function Stream.append(self: Streamer, newData: string)
+		-- adds new data to the end of a stream
+		self.Source ..= newData
+		self.Length = string.len(self.Source)
+		self:seek(0) --hacky but forces a recalculation of the isFinished flag
+	end
+
+	function Stream.toEnd(self: Streamer)
+		self:seek(self.Length)
+	end
+
 	return Stream
 end
 
@@ -59,7 +78,7 @@ function lz4.compress(str: string): string
 	local blocks: BlockData = {}
 	local iostream = streamer(str)
 
-	if iostream.Length > 8 then
+	if iostream.Length > 12 then
 		local firstFour = iostream:read(4)
 
 		local processed = firstFour
@@ -101,13 +120,13 @@ function lz4.compress(str: string): string
 						local pushMatch = true
 
 						if iostream.IsFinished then
-							if matchLen <= 4 then
+							if matchLen <= 5 then
 								LiteralPushValue = match
 								pushMatch = false
 							else
-								matchLen = matchLen - 4
+								matchLen = matchLen - 5
 								match = string.sub(match, 1, matchLen)
-								iostream:seek(-4)
+								iostream:seek(-5)
 							end
 						end
 
@@ -210,48 +229,64 @@ function lz4.compress(str: string): string
 end
 
 function lz4.decompress(lz4data: string): string
-	local iostream = streamer(lz4data)
-	local compressedLen = string.unpack("<I4", iostream:read(4))
-	local decompressedLen = string.unpack("<I4", iostream:read(4))
-	local reserved = string.unpack("<I4", iostream:read(4))
+	local inputStream = streamer(lz4data)
+
+	local compressedLen = string.unpack("<I4", inputStream:read(4))
+	local decompressedLen = string.unpack("<I4", inputStream:read(4))
+	local reserved = string.unpack("<I4", inputStream:read(4))
 
 	if compressedLen == 0 then
-		return iostream:read(iostream.Length)
+		return inputStream:read(decompressedLen)
 	end
 
-	local outBuffer = ""
-	repeat
-		local token = string.byte(iostream:read())
-		local litLen = bit32.rshift(token, 4)
-		local matLen = bit32.band(token, 0xF)
+	local outputStream = streamer("")
 
-		if litLen == 15 then
+	repeat
+		local token = string.byte(inputStream:read())
+		local litLen = bit32.rshift(token, 4)
+		local matLen = bit32.band(token, 15) + 4
+
+		if litLen >= 15 then
 			repeat
-				local nextByte = string.byte(iostream:read())
-				litLen = litLen + nextByte
+				local nextByte = string.byte(inputStream:read())
+				litLen += nextByte
 			until nextByte ~= 0xFF
 		end
 
-		outBuffer = outBuffer .. iostream:read(litLen)
-
-		if not iostream.IsFinished then
-			local offset = string.unpack("<I2", iostream:read(2))
-			if matLen == 15 then
+		local literal = inputStream:read(litLen)
+		outputStream:append(literal)
+		outputStream:toEnd()
+		if outputStream.Length < decompressedLen then
+			--match
+			local offset = string.unpack("<I2", inputStream:read(2))
+			if matLen >= 19 then
 				repeat
-					local nextByte = string.byte(iostream:read())
-					matLen = matLen + nextByte
+					local nextByte = string.byte(inputStream:read())
+					matLen += nextByte
 				until nextByte ~= 0xFF
 			end
 
-			matLen = matLen + 3
+			outputStream:seek(-offset)
+			local pos = outputStream.Offset
+			local match = outputStream:read(matLen)
+			local unreadBytes = outputStream.LastUnreadBytes
+			local extra
+			if unreadBytes then
+				repeat
+					outputStream.Offset = pos
+					extra = outputStream:read(unreadBytes)
+					unreadBytes = outputStream.LastUnreadBytes
+					match ..= extra
+				until unreadBytes <= 0
+			end
 
-			local off = (string.len(outBuffer) - offset) + 1
-			local offsetData = string.sub(outBuffer, off, off + matLen)
-			outBuffer = outBuffer .. offsetData
+			outputStream:append(match)
+			outputStream:toEnd()
 		end
-	until iostream.IsFinished
 
-	return outBuffer
+	until outputStream.Length >= decompressedLen
+
+	return outputStream.Source
 end
 
 return lz4
