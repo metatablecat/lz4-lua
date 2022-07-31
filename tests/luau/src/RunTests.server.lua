@@ -40,8 +40,6 @@ local Tests = {
 		local c = lz4.compress(data)
 		local d = lz4.decompress(c)
 
-		print(hex(c))
-		print(hex(d))
 		return lz4.decompress(c) == data
 	end
 }

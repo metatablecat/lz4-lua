@@ -193,7 +193,7 @@ function lz4.compress(str)
 	local compLen = string.len(output) - 4
 	local decompLen = iostream.Length
 
-	return string.pack("<I4", compLen) .. string.pack("<I4", decompLen) .. output, blocks
+	return string.pack("<I4", compLen) .. string.pack("<I4", decompLen) .. output
 end
 
 function lz4.decompress(lz4data)
