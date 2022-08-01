@@ -119,15 +119,10 @@ function lz4.compress(str: string): string
 						local matchLen = string.len(match)
 						local pushMatch = true
 
-						if iostream.IsFinished then
-							if matchLen <= 5 then
-								LiteralPushValue = match
-								pushMatch = false
-							else
-								matchLen = matchLen - 5
-								match = string.sub(match, 1, matchLen)
-								iostream:seek(-5)
-							end
+						if iostream.Length - iostream.Offset <= 5 then
+							LiteralPushValue = match
+							pushMatch = false
+							--better safe here, dont bother pushing to match ever
 						end
 
 						if pushMatch then
